@@ -9,6 +9,7 @@ const int MAX_ANGLE = 180;
 const int MIN_ANGLE = 0;
 #define SERVO_PIN 9
 bool stayClosed = false;
+const int SPEED = 1;
 
 // Sonar globals
 #define VCC_PIN 13
@@ -34,48 +35,85 @@ void setup() {
   delay(500); // delay for half a second
 }
 
-void showDistance(int distance);
-void round1(Servo servo, int distance)
-{
-  if (distance < TRIG_DIST && stayClosed == false) {
-    delay(1000);
-    servo.write(MIN_ANGLE);
-    delay(500);
-    stayClosed = true;
-    delay(500);
-  } else if (distance < TRIG_DIST && stayClosed == true) {
-    delay(1000);
-    stayClosed = false;
-    servo.write(MAX_ANGLE);
-    delay(500);
-  } else if (stayClosed == false) { // claw is needing to drop the object off
-    servo.write(MAX_ANGLE);
-  } else {
-    servo.write(MIN_ANGLE); // claw is carrying object
-  }
-}
-void round2(Servo servo, int distance);
-void round3(Servo servo, int distance);
-
-
-
-void loop() {
-  int distance = sonar.ping_cm();
-  round1(servo, distance);
-  // round2(servo, distance);
-  // round3(servo, distance);
-
-  showDistance(distance);
-  // loop refresh time
-  delay(500);
-}
-
-
 void showDistance(int distance)
 {
   if (distance >= MAX_DISTANCE || distance <= 0) {
     Serial.println("Out of range");
   } else {
-    Serial.println(distance" cm");
+    Serial.print(distance);
+    Serial.println(" cm");
   }
+}
+
+void closeClaw(Servo servo, int closeSpeed, int closeAngle, int initAngle)
+{
+  for (int i = initAngle; i >= closeAngle; i -= closeSpeed) {
+    servo.write(i);
+    delay(15);
+  }
+}
+
+void openClaw(Servo servo, int openSpeed, int openAngle, int initAngle)
+{
+  for (int i = initAngle; i <= openAngle; i += openSpeed) {
+    servo.write(i);
+    delay(15);
+  }
+}
+
+void varietyRound(Servo servo, int distance) // slower close/open cycles
+{
+  if (distance < TRIG_DIST && stayClosed == false) { // grabbing object
+    delay(1000);
+    closeClaw(servo, SPEED, MIN_ANGLE, MAX_ANGLE);
+    delay(500);
+    stayClosed = true;
+    delay(1000); // update delays as needed
+  } else if (distance < TRIG_DIST && stayClosed == true) { // dropping object
+    delay(1000);
+    openClaw(servo, SPEED, MAX_ANGLE, MIN_ANGLE);
+    delay(500);
+    stayClosed = false;
+    delay(1000);
+  } else if (stayClosed == false) { // claw is returning from dropping object
+    servo.write(MAX_ANGLE);
+  } else {
+    servo.write(MIN_ANGLE); // claw is carrying object
+  }
+}
+
+void bulkRound(Servo servo, int distance) // faster servo closing and opening
+{
+  if (distance < TRIG_DIST && stayClosed == false) { // grabbing
+    delay(1000);
+    servo.write(MIN_ANGLE);
+    delay(500);
+    stayClosed = true;
+    delay(1000);
+  } else if (distance < TRIG_DIST && stayClosed == true) { // dropping
+    delay(1000);
+    servo.write(MAX_ANGLE);
+    delay(500);
+    stayClosed = false;
+    delay(1000);
+  } else if (stayClosed == false) { // coming back after drop
+    servo.write(MAX_ANGLE);
+  } else {
+    servo.write(MIN_ANGLE); // carrying object
+  }
+}
+
+void coopRound(Servo servo, int distance); // not sure how i'll write this yet. strategy tbd bc it relies on the rest of the teams
+
+
+
+void loop() {
+  int distance = sonar.ping_cm();
+  varietyRound(servo, distance);
+  // bulkRound(servo, distance);
+  // coopRound(servo, distance);
+
+  showDistance(distance);
+  // loop refresh time
+  delay(500);
 }
