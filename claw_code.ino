@@ -11,8 +11,10 @@ const int BALLOON_MIN = 90;
 #define SERVO_PIN 9
 bool stayClosed = false;
 bool balloonTried = false;
-const int SPEED = 1;
+const int SPEED = 2;
+const int OPEN_DELAY = 1000;
 const int CLOSE_DELAY = 1500;
+const unsigned int MAX_CLOSE_TIME = 3000;
 
 // Sonar globals
 #define VCC_PIN 13
@@ -20,7 +22,7 @@ const int CLOSE_DELAY = 1500;
 #define ECHO_PIN 11 
 #define GROUND_PIN 10
 const int MAX_DISTANCE = 200;
-const int TRIG_DIST = 1; // distance required for claw to actuate
+const int TRIG_DIST = 15; // distance required for claw to actuate
 
 NewPing sonar(TRIGGER_PIN, ECHO_PIN, MAX_DISTANCE); // initialize NewPing
 
@@ -38,6 +40,20 @@ void setup() {
   delay(500); // delay for half a second
 }
 
+int getAvgDist()
+{
+  int totalDist = 0;
+  int samples = 3;
+
+  for (int i = 0; i < samples; i++) {
+    totalDist += sonar.ping_cm();
+    delay(10);
+  }
+
+  return totalDist/samples;
+}
+
+
 // This function is obsolete for the competition now. Useful for testing tho ig
 void showDistance(int distance)
 {
@@ -49,15 +65,21 @@ void showDistance(int distance)
   }
 }
 
-void closeClaw(Servo servo, int closeSpeed, int closeAngle, int initAngle)
+void closeClaw(Servo &servo, int closeSpeed, int closeAngle, int initAngle)
 {
+  unsigned long int startTime = millis();
+
   for (int i = initAngle; i >= closeAngle; i -= closeSpeed) {
     servo.write(i);
     delay(15);
+    if (millis() - startTime > MAX_CLOSE_TIME) {
+      // Assume we've hit an object
+      break;
+    }
   }
 }
 
-void openClaw(Servo servo, int openSpeed, int openAngle, int initAngle)
+void openClaw(Servo &servo, int openSpeed, int openAngle, int initAngle)
 {
   for (int i = initAngle; i <= openAngle; i += openSpeed) {
     servo.write(i);
@@ -65,16 +87,16 @@ void openClaw(Servo servo, int openSpeed, int openAngle, int initAngle)
   }
 }
 
-void balloonFirst(Servo servo, int distance)
+void balloonFirst(Servo &servo, int distance)
 {
   if (distance < TRIG_DIST && stayClosed == false) { // grabbing object
-    delay(500);
+    delay(OPEN_DELAY);
     closeClaw(servo, SPEED, BALLOON_MIN, MAX_ANGLE);
     stayClosed = true;
     Serial.println("balloon close");
     delay(CLOSE_DELAY); // update delays as needed
   } else if (distance < TRIG_DIST && stayClosed == true) { // dropping object
-    delay(500);
+    delay(OPEN_DELAY);
     openClaw(servo, SPEED, MAX_ANGLE, BALLOON_MIN);
     balloonTried = true;
     stayClosed = false;
@@ -87,17 +109,16 @@ void balloonFirst(Servo servo, int distance)
   }
 }
 
-void varietyRound(Servo servo, int distance) // slower close/open cycles
+void varietyRound(Servo &servo, int distance) // slower close/open cycles
 {
-
   if (distance < TRIG_DIST && stayClosed == false) { // grabbing object
-    delay(500);
+    delay(OPEN_DELAY);
     closeClaw(servo, SPEED, MIN_ANGLE, MAX_ANGLE);
     Serial.println("regular close");
     stayClosed = true;
     delay(CLOSE_DELAY); // update delays as needed
   } else if (distance < TRIG_DIST && stayClosed == true) { // dropping object
-    delay(500);
+    delay(OPEN_DELAY);
     openClaw(servo, SPEED, MAX_ANGLE, MIN_ANGLE);
     Serial.println("Regular open");
     stayClosed = false;
@@ -107,19 +128,17 @@ void varietyRound(Servo servo, int distance) // slower close/open cycles
   } else {
     servo.write(MIN_ANGLE); // claw is carrying object
   }
-
-  
 }
 
-void bulkRound(Servo servo, int distance) // faster servo closing and opening
+void bulkRound(Servo &servo, int distance) // faster servo closing and opening
 {
   if (distance < TRIG_DIST && stayClosed == false) { // grabbing
-    delay(500);
+    delay(OPEN_DELAY);
     servo.write(MIN_ANGLE);
     stayClosed = true;
     delay(CLOSE_DELAY);
   } else if (distance < TRIG_DIST && stayClosed == true) { // dropping
-    delay(500);
+    delay(OPEN_DELAY);
     servo.write(MAX_ANGLE);
     stayClosed = false;
     delay(CLOSE_DELAY);
@@ -135,13 +154,14 @@ void coopRound(Servo servo, int distance); // not sure how i'll write this yet. 
 
 
 void loop() {
-  int distance = sonar.ping_cm();
+  int distance = getAvgDist();
 
   if (!balloonTried) {
     balloonFirst(servo, distance);
   } else {
     varietyRound(servo, distance);
   }
+
   // bulkRound(servo, distance);
   // coopRound(servo, distance);
 
